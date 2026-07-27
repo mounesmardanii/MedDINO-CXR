@@ -1,1 +1,5 @@
-﻿# Project dependencies will be added and pinned after environment validation.
+﻿--extra-index-url https://download.pytorch.org/whl/cu118
+
+torch==2.7.1+cu118
+torchvision==0.22.1+cu118
+ipykernel==7.3.0
