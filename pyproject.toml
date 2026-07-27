@@ -1,0 +1,12 @@
+﻿[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meddino-cxr"
+version = "0.1.0"
+description = "Label-efficient chest X-ray classification using DINOv2"
+requires-python = ">=3.11,<3.12"
+
+[tool.setuptools.packages.find]
+where = ["src"]
