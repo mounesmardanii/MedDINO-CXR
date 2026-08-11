@@ -147,3 +147,58 @@ def evaluate_one_epoch(
         )
 
     return running_loss / processed_batches
+
+
+@torch.inference_mode()
+def predict(
+    model: nn.Module,
+    loader: Iterable,
+    device: torch.device,
+    max_batches: int | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    model.eval()
+
+    targets = []
+    probabilities = []
+
+    progress = tqdm(
+        loader,
+        desc="Prediction",
+        leave=False,
+    )
+
+    for batch_index, (images, labels) in enumerate(progress):
+        if (
+            max_batches is not None
+            and batch_index >= max_batches
+        ):
+            break
+
+        images = images.to(
+            device,
+            non_blocking=device.type == "cuda",
+        )
+
+        logits = model(images)
+
+        batch_probabilities = torch.sigmoid(
+            logits
+        )
+
+        targets.append(
+            labels.cpu()
+        )
+
+        probabilities.append(
+            batch_probabilities.cpu()
+        )
+
+    if not targets:
+        raise RuntimeError(
+            "No prediction batches were processed."
+        )
+
+    return (
+        torch.cat(targets, dim=0),
+        torch.cat(probabilities, dim=0),
+    )
