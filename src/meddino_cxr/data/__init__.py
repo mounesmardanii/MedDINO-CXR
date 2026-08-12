@@ -1,4 +1,7 @@
-from .dataloaders import build_dataloader
+from .dataloaders import (
+    build_dataloader,
+    build_feature_dataloader,
+)
 from .dataset import ChestMNISTDataset
 from .transforms import (
     IMAGENET_MEAN,
@@ -11,6 +14,7 @@ from .transforms import (
 __all__ = [
     "ChestMNISTDataset",
     "build_dataloader",
+    "build_feature_dataloader",
     "IMAGENET_MEAN",
     "IMAGENET_STD",
     "build_train_transform",

@@ -52,3 +52,38 @@ def build_dataloader(
         pin_memory=pin_memory,
         drop_last=False,
     )
+
+
+def build_feature_dataloader(
+    split: Split,
+    data_dir: str | Path | None = None,
+    batch_size: int = 16,
+    num_workers: int = 0,
+    pin_memory: bool | None = None,
+) -> DataLoader:
+    if split not in {"train", "val", "test"}:
+        raise ValueError(
+            "split must be one of: 'train', 'val', or 'test'."
+        )
+
+    dataset_kwargs = {
+        "split": split,
+        "transform": build_eval_transform(),
+    }
+
+    if data_dir is not None:
+        dataset_kwargs["data_dir"] = data_dir
+
+    dataset = ChestMNISTDataset(**dataset_kwargs)
+
+    if pin_memory is None:
+        pin_memory = torch.cuda.is_available()
+
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=False,
+    )
