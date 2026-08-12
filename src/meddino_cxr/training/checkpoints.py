@@ -41,9 +41,11 @@ def load_checkpoint(
     optimizer: Optimizer | None = None,
     device: str | torch.device = "cpu",
 ) -> dict:
+    device = torch.device(device)
+
     checkpoint = torch.load(
         Path(path),
-        map_location=device,
+        map_location="cpu",
         weights_only=False,
     )
 
@@ -56,14 +58,33 @@ def load_checkpoint(
             checkpoint["optimizer_state_dict"]
         )
 
-    return checkpoint
+        for state in optimizer.state.values():
+            for key, value in state.items():
+                if isinstance(value, torch.Tensor):
+                    state[key] = value.to(device)
+
+    metadata = {
+        "epoch": checkpoint["epoch"],
+        "metrics": checkpoint.get(
+            "metrics",
+            {},
+        ),
+    }
+
+    del checkpoint
+
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+
+    return metadata
 
 
 def is_better_metric(
     current: float,
     best: float | None,
+    min_delta: float = 0.0,
 ) -> bool:
     if best is None:
         return True
 
-    return current > best
+    return current > best + min_delta

@@ -23,10 +23,11 @@ from meddino_cxr.training import (
     build_optimizer,
     compute_multilabel_metrics,
     compute_pos_weight,
+    evaluate_one_epoch,
     is_better_metric,
+    load_checkpoint,
     predict,
     save_checkpoint,
-    evaluate_one_epoch,
     train_one_epoch,
 )
 
@@ -39,13 +40,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--epochs",
         type=int,
-        default=5,
+        default=8,
     )
 
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=8,
+        default=32,
     )
 
     parser.add_argument(
@@ -96,6 +97,24 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--patience",
+        type=int,
+        default=2,
+    )
+
+    parser.add_argument(
+        "--min-delta",
+        type=float,
+        default=1e-4,
+    )
+
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        default=None,
+    )
+
+    parser.add_argument(
         "--checkpoint-path",
         type=Path,
         default=PROJECT_ROOT
@@ -122,6 +141,19 @@ def set_seed(seed: int) -> None:
 
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def load_history(
+    path: Path,
+) -> list[dict]:
+    if not path.is_file():
+        return []
+
+    with path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        return json.load(file)
 
 
 def save_history(
@@ -195,19 +227,84 @@ def main() -> None:
         weight_decay=args.weight_decay,
     )
 
+    history = load_history(
+        args.history_path
+    )
+
+    start_epoch = 1
     best_macro_roc_auc = None
-    history = []
+    epochs_without_improvement = 0
+
+    if args.resume_from is not None:
+        checkpoint = load_checkpoint(
+            path=args.resume_from,
+            model=model,
+            optimizer=optimizer,
+            device=device,
+        )
+
+        start_epoch = (
+            int(checkpoint["epoch"]) + 1
+        )
+
+        checkpoint_metrics = checkpoint.get(
+            "metrics",
+            {},
+        )
+
+        if "macro_roc_auc" in checkpoint_metrics:
+            best_macro_roc_auc = float(
+                checkpoint_metrics[
+                    "macro_roc_auc"
+                ]
+            )
+
+        history = [
+            item
+            for item in history
+            if int(item["epoch"]) < start_epoch
+        ]
+
+        print(
+            "Resumed from: "
+            f"{args.resume_from}"
+        )
+
+        print(
+            "Checkpoint epoch: "
+            f"{checkpoint['epoch']}"
+        )
+
+        print(
+            "Best Macro ROC-AUC: "
+            f"{best_macro_roc_auc}"
+        )
 
     print(f"Device: {device}")
-    print(f"Epochs: {args.epochs}")
+    print(f"Max epochs: {args.epochs}")
+    print(f"Start epoch: {start_epoch}")
     print(f"Batch size: {args.batch_size}")
     print(f"Weighted loss: {args.weighted_loss}")
+    print(f"Patience: {args.patience}")
+    print(f"Min delta: {args.min_delta}")
     print(f"Train samples: {len(train_loader.dataset)}")
     print(f"Validation samples: {len(val_loader.dataset)}")
 
-    for epoch in range(1, args.epochs + 1):
+    if start_epoch > args.epochs:
+        print(
+            "Training already reached "
+            "the requested epoch limit."
+        )
+        return
+
+    for epoch in range(
+        start_epoch,
+        args.epochs + 1,
+    ):
         print()
-        print(f"Epoch {epoch}/{args.epochs}")
+        print(
+            f"Epoch {epoch}/{args.epochs}"
+        )
 
         train_loss = train_one_epoch(
             model=model,
@@ -286,11 +383,15 @@ def main() -> None:
             f"{metrics['micro_average_precision']:.6f}"
         )
 
-        if is_better_metric(
-            macro_roc_auc,
-            best_macro_roc_auc,
-        ):
+        improved = is_better_metric(
+            current=macro_roc_auc,
+            best=best_macro_roc_auc,
+            min_delta=args.min_delta,
+        )
+
+        if improved:
             best_macro_roc_auc = macro_roc_auc
+            epochs_without_improvement = 0
 
             checkpoint_metrics = {
                 "train_loss": train_loss,
@@ -310,6 +411,25 @@ def main() -> None:
                 "Best checkpoint saved: "
                 f"{args.checkpoint_path}"
             )
+
+        else:
+            epochs_without_improvement += 1
+
+            print(
+                "No improvement: "
+                f"{epochs_without_improvement}/"
+                f"{args.patience}"
+            )
+
+        if (
+            epochs_without_improvement
+            >= args.patience
+        ):
+            print()
+            print(
+                "Early stopping triggered."
+            )
+            break
 
     print()
     print("Training completed.")
