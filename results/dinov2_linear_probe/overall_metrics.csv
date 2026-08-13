@@ -1,0 +1,2 @@
+model,checkpoint_epoch,samples,macro_roc_auc,micro_roc_auc,macro_average_precision,micro_average_precision
+dinov2_vits14_linear_probe,50,22433,0.7654592146877656,0.8337241507091975,0.1588235152998761,0.24391623326828304
