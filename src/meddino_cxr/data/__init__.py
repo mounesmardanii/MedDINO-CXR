@@ -9,7 +9,7 @@ from .transforms import (
     build_eval_transform,
     build_train_transform,
 )
-
+from .embedding_dataset import DINOv2EmbeddingDataset
 
 __all__ = [
     "ChestMNISTDataset",
@@ -19,4 +19,5 @@ __all__ = [
     "IMAGENET_STD",
     "build_train_transform",
     "build_eval_transform",
+    "DINOv2EmbeddingDataset",
 ]
