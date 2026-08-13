@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from .dataset import ChestMNISTDataset
 from .transforms import build_eval_transform, build_train_transform
 from .embedding_dataset import DINOv2EmbeddingDataset
+
 
 Split = Literal["train", "val", "test"]
 
@@ -96,16 +98,58 @@ def build_embedding_dataloader(
     num_workers: int = 0,
     pin_memory: bool | None = None,
     seed: int = 42,
+    indices: Sequence[int] | None = None,
 ) -> DataLoader:
     if split not in {"train", "val", "test"}:
         raise ValueError(
             "split must be one of: 'train', 'val', or 'test'."
         )
 
-    dataset = DINOv2EmbeddingDataset(
+    base_dataset = DINOv2EmbeddingDataset(
         split=split,
         data_dir=data_dir,
     )
+
+    dataset = base_dataset
+
+    if indices is not None:
+        if split != "train":
+            raise ValueError(
+                "Subset indices are only supported for the train split."
+            )
+
+        subset_indices = [
+            int(index)
+            for index in indices
+        ]
+
+        if not subset_indices:
+            raise ValueError(
+                "Subset indices must not be empty."
+            )
+
+        if len(
+            set(subset_indices)
+        ) != len(
+            subset_indices
+        ):
+            raise ValueError(
+                "Subset indices must be unique."
+            )
+
+        if (
+            min(subset_indices) < 0
+            or max(subset_indices)
+            >= len(base_dataset)
+        ):
+            raise ValueError(
+                "Subset indices are outside the dataset range."
+            )
+
+        dataset = Subset(
+            base_dataset,
+            subset_indices,
+        )
 
     if pin_memory is None:
         pin_memory = torch.cuda.is_available()

@@ -103,6 +103,18 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--subset-archive",
+        type=Path,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--subset-key",
+        type=str,
+        default=None,
+    )
+
+    parser.add_argument(
         "--checkpoint-path",
         type=Path,
         default=PROJECT_ROOT
@@ -169,6 +181,52 @@ def main() -> None:
 
     set_seed(args.seed)
 
+    train_indices = None
+    subset_archive = None
+
+    if (
+        args.subset_archive is None
+        and args.subset_key is not None
+    ):
+        raise ValueError(
+            "--subset-key requires --subset-archive."
+        )
+
+    if (
+        args.subset_archive is not None
+        and args.subset_key is None
+    ):
+        raise ValueError(
+            "--subset-archive requires --subset-key."
+        )
+
+    if args.subset_archive is not None:
+        subset_archive = (
+            args.subset_archive
+            .expanduser()
+            .resolve()
+        )
+
+        if not subset_archive.is_file():
+            raise FileNotFoundError(
+                f"Subset archive not found: {subset_archive}"
+            )
+
+        with np.load(
+            subset_archive
+        ) as archive:
+            if args.subset_key not in archive:
+                raise KeyError(
+                    f"Subset key not found: {args.subset_key}"
+                )
+
+            train_indices = np.asarray(
+                archive[
+                    args.subset_key
+                ],
+                dtype=np.int64,
+            ).copy()
+
     device = torch.device(
         "cuda"
         if torch.cuda.is_available()
@@ -180,6 +238,7 @@ def main() -> None:
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         seed=args.seed,
+        indices=train_indices,
     )
 
     val_loader = build_embedding_dataloader(
@@ -262,6 +321,14 @@ def main() -> None:
     print(f"Learning rate: {args.learning_rate}")
     print(f"Weight decay: {args.weight_decay}")
     print(f"Seed: {args.seed}")
+    print(
+        "Subset archive: "
+        f"{subset_archive}"
+    )
+    print(
+        "Subset key: "
+        f"{args.subset_key}"
+    )
     print(f"Patience: {args.patience}")
     print(f"Min delta: {args.min_delta}")
     print(
