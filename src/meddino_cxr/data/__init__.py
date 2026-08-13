@@ -11,6 +11,14 @@ from .transforms import (
     build_train_transform,
 )
 from .embedding_dataset import DINOv2EmbeddingDataset
+from .label_efficiency import (
+    DEFAULT_FRACTIONS,
+    build_nested_multilabel_subsets,
+    compute_class_statistics,
+    hash_indices,
+    validate_nested_subsets,
+)
+
 
 __all__ = [
     "ChestMNISTDataset",
@@ -22,4 +30,9 @@ __all__ = [
     "build_eval_transform",
     "DINOv2EmbeddingDataset",
     "build_embedding_dataloader",
+    "DEFAULT_FRACTIONS",
+    "build_nested_multilabel_subsets",
+    "compute_class_statistics",
+    "hash_indices",
+    "validate_nested_subsets",
 ]
