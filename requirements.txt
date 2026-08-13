@@ -12,3 +12,4 @@ matplotlib==3.11.1
 tqdm==4.70.0
 PyYAML==6.0.3
 Pillow==12.2.0
+iterative-stratification==0.1.8
