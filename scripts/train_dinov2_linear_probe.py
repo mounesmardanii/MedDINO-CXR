@@ -24,6 +24,7 @@ from meddino_cxr.training import (
     compute_multilabel_metrics,
     evaluate_one_epoch,
     is_better_metric,
+    load_checkpoint,
     predict,
     save_checkpoint,
     train_one_epoch,
@@ -96,6 +97,12 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--resume-from",
+        type=Path,
+        default=None,
+    )
+
+    parser.add_argument(
         "--checkpoint-path",
         type=Path,
         default=PROJECT_ROOT
@@ -122,6 +129,19 @@ def set_seed(seed: int) -> None:
 
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def load_history(
+    path: Path,
+) -> list[dict]:
+    if not path.is_file():
+        return []
+
+    with path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        return json.load(file)
 
 
 def save_history(
@@ -182,12 +202,62 @@ def main() -> None:
     )
 
     history = []
-
+    start_epoch = 1
     best_macro_roc_auc = None
     epochs_without_improvement = 0
 
+    if args.resume_from is not None:
+        checkpoint = load_checkpoint(
+            path=args.resume_from,
+            model=model,
+            optimizer=optimizer,
+            device=device,
+        )
+
+        start_epoch = (
+            int(checkpoint["epoch"]) + 1
+        )
+
+        checkpoint_metrics = checkpoint.get(
+            "metrics",
+            {},
+        )
+
+        if "macro_roc_auc" in checkpoint_metrics:
+            best_macro_roc_auc = float(
+                checkpoint_metrics[
+                    "macro_roc_auc"
+                ]
+            )
+
+        history = load_history(
+            args.history_path
+        )
+
+        history = [
+            item
+            for item in history
+            if int(item["epoch"]) < start_epoch
+        ]
+
+        print(
+            "Resumed from: "
+            f"{args.resume_from}"
+        )
+
+        print(
+            "Checkpoint epoch: "
+            f"{checkpoint['epoch']}"
+        )
+
+        print(
+            "Best Macro ROC-AUC: "
+            f"{best_macro_roc_auc}"
+        )
+
     print(f"Device: {device}")
     print(f"Max epochs: {args.epochs}")
+    print(f"Start epoch: {start_epoch}")
     print(f"Batch size: {args.batch_size}")
     print(f"Learning rate: {args.learning_rate}")
     print(f"Weight decay: {args.weight_decay}")
@@ -205,8 +275,16 @@ def main() -> None:
         f"{sum(p.numel() for p in model.parameters() if p.requires_grad)}"
     )
 
+    if start_epoch > args.epochs:
+        print()
+        print(
+            "Training already reached "
+            "the requested epoch limit."
+        )
+        return
+
     for epoch in range(
-        1,
+        start_epoch,
         args.epochs + 1,
     ):
         print()
