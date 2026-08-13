@@ -1,0 +1,4 @@
+model,adaptation_regime,comparison_role,checkpoint_epoch,macro_roc_auc,micro_roc_auc,macro_average_precision,micro_average_precision
+resnet18_unweighted,end_to_end_finetuning,primary_baseline,4,0.8215689044538304,0.8697985616130552,0.22962851078785101,0.31636466183843703
+resnet18_weighted,end_to_end_finetuning,imbalance_ablation,2,0.8199081956464218,0.8506985349940676,0.2219695626001502,0.26047108417513515
+dinov2_vits14_linear_probe,frozen_linear_probe,foundation_model_probe,50,0.7654592146877656,0.8337241507091975,0.1588235152998761,0.24391623326828304
