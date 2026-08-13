@@ -1,5 +1,6 @@
 from .dataloaders import (
     build_dataloader,
+    build_embedding_dataloader,
     build_feature_dataloader,
 )
 from .dataset import ChestMNISTDataset
@@ -20,4 +21,5 @@ __all__ = [
     "build_train_transform",
     "build_eval_transform",
     "DINOv2EmbeddingDataset",
+    "build_embedding_dataloader",
 ]
