@@ -8,8 +8,8 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 from .dataset import ChestMNISTDataset
-from .transforms import build_eval_transform, build_train_transform
 from .embedding_dataset import DINOv2EmbeddingDataset
+from .transforms import build_eval_transform, build_train_transform
 
 
 Split = Literal["train", "val", "test"]
@@ -21,6 +21,8 @@ def build_dataloader(
     batch_size: int = 8,
     num_workers: int = 0,
     pin_memory: bool | None = None,
+    seed: int | None = None,
+    indices: Sequence[int] | None = None,
 ) -> DataLoader:
     if split not in {"train", "val", "test"}:
         raise ValueError(
@@ -41,10 +43,51 @@ def build_dataloader(
     if data_dir is not None:
         dataset_kwargs["data_dir"] = data_dir
 
-    dataset = ChestMNISTDataset(**dataset_kwargs)
+    base_dataset = ChestMNISTDataset(**dataset_kwargs)
+    dataset = base_dataset
+
+    if indices is not None:
+        if split != "train":
+            raise ValueError(
+                "Subset indices are only supported for the train split."
+            )
+
+        subset_indices = [
+            int(index)
+            for index in indices
+        ]
+
+        if not subset_indices:
+            raise ValueError(
+                "Subset indices must not be empty."
+            )
+
+        if len(set(subset_indices)) != len(subset_indices):
+            raise ValueError(
+                "Subset indices must be unique."
+            )
+
+        if (
+            min(subset_indices) < 0
+            or max(subset_indices) >= len(base_dataset)
+        ):
+            raise ValueError(
+                "Subset indices are outside the dataset range."
+            )
+
+        dataset = Subset(
+            base_dataset,
+            subset_indices,
+        )
 
     if pin_memory is None:
         pin_memory = torch.cuda.is_available()
+
+    generator = None
+
+    if seed is not None:
+        generator = torch.Generator()
+        generator.manual_seed(seed)
 
     return DataLoader(
         dataset,
@@ -53,6 +96,7 @@ def build_dataloader(
         num_workers=num_workers,
         pin_memory=pin_memory,
         drop_last=False,
+        generator=generator,
     )
 
 
@@ -128,19 +172,14 @@ def build_embedding_dataloader(
                 "Subset indices must not be empty."
             )
 
-        if len(
-            set(subset_indices)
-        ) != len(
-            subset_indices
-        ):
+        if len(set(subset_indices)) != len(subset_indices):
             raise ValueError(
                 "Subset indices must be unique."
             )
 
         if (
             min(subset_indices) < 0
-            or max(subset_indices)
-            >= len(base_dataset)
+            or max(subset_indices) >= len(base_dataset)
         ):
             raise ValueError(
                 "Subset indices are outside the dataset range."

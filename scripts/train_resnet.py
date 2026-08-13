@@ -109,6 +109,18 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--subset-archive",
+        type=Path,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--subset-key",
+        type=str,
+        default=None,
+    )
+
+    parser.add_argument(
         "--resume-from",
         type=Path,
         default=None,
@@ -176,10 +188,73 @@ def save_history(
         )
 
 
+def resolve_subset(
+    archive_path: Path | None,
+    subset_key: str | None,
+) -> tuple[Path | None, np.ndarray | None]:
+    if (archive_path is None) != (subset_key is None):
+        raise ValueError(
+            "--subset-archive and --subset-key must be provided together."
+        )
+
+    if archive_path is None:
+        return None, None
+
+    if not archive_path.is_absolute():
+        archive_path = PROJECT_ROOT / archive_path
+
+    archive_path = archive_path.resolve()
+
+    if not archive_path.is_file():
+        raise FileNotFoundError(
+            f"Subset archive not found: {archive_path}"
+        )
+
+    with np.load(archive_path) as archive:
+        if subset_key not in archive.files:
+            available = ", ".join(archive.files)
+            raise KeyError(
+                f"Subset key '{subset_key}' not found. "
+                f"Available keys: {available}"
+            )
+
+        indices = np.asarray(
+            archive[subset_key],
+            dtype=np.int64,
+        )
+
+    if indices.ndim != 1:
+        raise ValueError(
+            "Subset indices must be one-dimensional."
+        )
+
+    if indices.size == 0:
+        raise ValueError(
+            "Subset indices must not be empty."
+        )
+
+    if np.unique(indices).size != indices.size:
+        raise ValueError(
+            "Subset indices must be unique."
+        )
+
+    return archive_path, indices
+
+
 def main() -> None:
     args = parse_args()
 
     set_seed(args.seed)
+
+    subset_archive, subset_indices = resolve_subset(
+        args.subset_archive,
+        args.subset_key,
+    )
+
+    if args.weighted_loss and subset_indices is not None:
+        raise ValueError(
+            "Weighted loss is not supported for subset training."
+        )
 
     device = torch.device(
         "cuda"
@@ -187,10 +262,18 @@ def main() -> None:
         else "cpu"
     )
 
+    loader_seed = (
+        args.seed
+        if subset_indices is not None
+        else None
+    )
+
     train_loader = build_dataloader(
         "train",
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        seed=loader_seed,
+        indices=subset_indices,
     )
 
     val_loader = build_dataloader(
@@ -285,8 +368,14 @@ def main() -> None:
     print(f"Start epoch: {start_epoch}")
     print(f"Batch size: {args.batch_size}")
     print(f"Weighted loss: {args.weighted_loss}")
+    print(f"Seed: {args.seed}")
     print(f"Patience: {args.patience}")
     print(f"Min delta: {args.min_delta}")
+
+    if subset_archive is not None:
+        print(f"Subset archive: {subset_archive}")
+        print(f"Subset key: {args.subset_key}")
+
     print(f"Train samples: {len(train_loader.dataset)}")
     print(f"Validation samples: {len(val_loader.dataset)}")
 
