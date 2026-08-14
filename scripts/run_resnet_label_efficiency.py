@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -239,6 +240,62 @@ def validate_inputs(
             )
 
 
+def is_run_complete(
+    history_path: Path,
+    max_epochs: int,
+    patience: int,
+    min_delta: float,
+) -> bool:
+    if not history_path.is_file():
+        return False
+
+    with history_path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        history = json.load(file)
+
+    if not history:
+        return False
+
+    expected_epochs = list(
+        range(
+            1,
+            len(history) + 1,
+        )
+    )
+
+    actual_epochs = [
+        int(item["epoch"])
+        for item in history
+    ]
+
+    if actual_epochs != expected_epochs:
+        return False
+
+    best = None
+    epochs_without_improvement = 0
+
+    for item in history:
+        value = float(
+            item["macro_roc_auc"]
+        )
+
+        if (
+            best is None
+            or value > best + min_delta
+        ):
+            best = value
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+
+        if epochs_without_improvement >= patience:
+            return True
+
+    return actual_epochs[-1] >= max_epochs
+
+
 def main() -> None:
     args = parse_args()
 
@@ -346,27 +403,46 @@ def main() -> None:
                 f"Seed: {seed}"
             )
 
-            if (
+            run_complete = (
                 checkpoint_exists
-                != history_exists
-            ):
-                raise RuntimeError(
-                    "Incomplete existing run detected: "
-                    f"fraction={fraction}, seed={seed}"
+                and history_exists
+                and is_run_complete(
+                    history_path=history_path,
+                    max_epochs=args.epochs,
+                    patience=args.patience,
+                    min_delta=args.min_delta,
                 )
+            )
 
             if (
                 args.skip_existing
-                and checkpoint_exists
-                and history_exists
+                and run_complete
             ):
                 skipped += 1
 
                 print(
-                    "Existing run skipped."
+                    "Completed existing run skipped."
                 )
 
                 continue
+
+            incomplete_existing = (
+                checkpoint_exists
+                or history_exists
+            )
+
+            if incomplete_existing:
+                print(
+                    "Incomplete existing run detected. "
+                    "Restarting from scratch."
+                )
+
+                if not args.dry_run:
+                    if checkpoint_exists:
+                        checkpoint_path.unlink()
+
+                    if history_exists:
+                        history_path.unlink()
 
             command = build_command(
                 seed=seed,
