@@ -39,3 +39,9 @@ checkpoints/*
 .DS_Store
 Thumbs.db
 *.egg-info/
+
+data/manifests/nih_manifest.csv
+data/manifests/nih_manifest_split.csv
+data/manifests/nih_train.csv
+data/manifests/nih_validate.csv
+data/manifests/nih_test.csv
